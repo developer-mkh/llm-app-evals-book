@@ -1,5 +1,4 @@
 import os
-from typing import Any
 
 from dotenv import load_dotenv
 from langchain.chat_models import init_chat_model
@@ -7,24 +6,17 @@ from langchain_core.language_models import BaseChatModel
 
 load_dotenv()
 
-ANTHROPIC_MODEL: str = os.environ.get("ANTHROPIC_MODEL") or "claude-sonnet-5"
-
-# claude-sonnet-5では拡張思考のbudget_tokens指定が廃止され、adaptiveのみ指定できる。
-# thinkingを未指定にするとデフォルトでadaptiveになるため、無効化は明示する必要がある
-_THINKING_CONFIG: dict[str, Any] = {"type": "adaptive"}
-_THINKING_DISABLED_CONFIG: dict[str, Any] = {"type": "disabled"}
-_THINKING_MAX_TOKENS = 16000
+LM_STUDIO_MODEL = os.environ.get("LM_STUDIO_MODEL") or "google/gemma-4-12b-qat"
+LM_STUDIO_BASE_URL = os.environ.get("LM_STUDIO_BASE_URL") or "http://host.docker.internal:1234/v1"
+LM_STUDIO_API_KEY = os.environ.get("LM_STUDIO_API_KEY") or "lm-studio"
 
 
 def get_model(*, thinking: bool = False) -> BaseChatModel:
-    """Create a chat model instance, optionally with extended thinking enabled."""
-    kwargs: dict[str, Any] = {
-        "model": ANTHROPIC_MODEL,
-        "model_provider": "anthropic",
-    }
-    if thinking:
-        kwargs["thinking"] = _THINKING_CONFIG
-        kwargs["max_tokens"] = _THINKING_MAX_TOKENS
-    else:
-        kwargs["thinking"] = _THINKING_DISABLED_CONFIG
-    return init_chat_model(**kwargs)  # type: ignore[no-any-return]
+    """Create a chat model instance using the LM Studio OpenAI-compatible API."""
+    del thinking  # Keep compatibility with existing callers; LM Studio reasoning is not configured here.
+    return init_chat_model(
+        model=LM_STUDIO_MODEL,
+        model_provider="openai",
+        base_url=LM_STUDIO_BASE_URL,
+        api_key=LM_STUDIO_API_KEY,
+    )  # type: ignore[no-any-return]
