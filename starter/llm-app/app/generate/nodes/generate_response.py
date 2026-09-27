@@ -15,7 +15,14 @@ _SYSTEM_PROMPT_TEMPLATE = """\
 - 具体的で役立つ返信を提供すること
 - 締めの挨拶で終わること
 - 返信件名はお問い合わせ内容に基づいた適切な件名にすること
-</rules>"""
+</rules>
+
+<forbidden_items>
+以下の内容が含まれないように注意してください。
+1. 見積り金額の提示: 具体的な金額、料金、費用の数値を提示しないこと。「お見積もりを作成します」のような案内は問題ありません。
+2. 未確定情報の断定: 確認が必要な事項を断定的に述べていないこと。「確認いたします」「担当より回答いたします」といった表現を用い、「必ず対応可能です」などの断定を避けること。
+3. 競合他社への言及: 他社の製品名、サービス名、会社名に具体的に言及しないこと。
+</forbidden_items>"""
 
 _USER_PROMPT_TEMPLATE = """\
 以下のお問い合わせに対して返信メールを作成してください。件名と本文を分けて出力してください。
@@ -33,9 +40,7 @@ _USER_PROMPT_TEMPLATE = """\
 class GeneratedResponse(BaseModel):
     """生成された返信メール"""
 
-    response_subject: str = Field(
-        description="返信メールの件名（お問い合わせ内容から適切な件名を生成）"
-    )
+    response_subject: str = Field(description="返信メールの件名（お問い合わせ内容から適切な件名を生成）")
     response_body: str = Field(description="返信メールの本文")
 
 
