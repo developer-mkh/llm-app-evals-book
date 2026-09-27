@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { markAsSent } from "@/lib/db";
 import { withInquiry } from "@/lib/api-helpers";
 
+const LLM_API_URL = process.env.LLM_API_URL ?? "http://localhost:8000";
+
 export const POST = (request: Request, context: { params: Promise<{ id: string }> }) =>
   withInquiry(request, context, async (inquiry, body) => {
     if (inquiry.status !== "draft") {
@@ -19,18 +21,44 @@ export const POST = (request: Request, context: { params: Promise<{ id: string }
       );
     }
 
+    let editDistance: number | null = null;
+    let operatorEditedTopic: boolean | null = null;
+
+    if (inquiry.run_id && inquiry.original_topic && inquiry.topic) {
+      const fbRes = await fetch(`${LLM_API_URL}/api/feedback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          run_id: inquiry.run_id,
+          ai_body: inquiry.generated_draft?.body ?? null,
+          final_body: responseBody,
+          original_topic: inquiry.original_topic,
+          current_topic: inquiry.topic,
+        }),
+      });
+      if (!fbRes.ok) {
+        return NextResponse.json(
+          { error: "フィードバックの記録に失敗しました" },
+          { status: 502 },
+        );
+      }
+      const fbData = await fbRes.json();
+      editDistance = fbData.edit_distance;
+      operatorEditedTopic = fbData.operator_edited_topic;
+    }
+
     const updated = markAsSent(inquiry.id, {
       subject,
       body: responseBody,
-      edit_distance: null,
-      operator_edited_topic: null,
+      edit_distance: editDistance,
+      operator_edited_topic: operatorEditedTopic,
       expected_updated_at: inquiry.updated_at,
     });
 
     if (!updated) return NextResponse.json({ error: "お問い合わせが更新されました。再確認してください" }, { status: 409 });
 
     return NextResponse.json({
-      id: updated!.id,
+      id: updated.id,
       status: updated!.status,
       sent_at: updated!.sent_at,
     });

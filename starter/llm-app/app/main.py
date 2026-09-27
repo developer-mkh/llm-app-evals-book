@@ -1,6 +1,7 @@
 from fastapi import FastAPI
-from langsmith import traceable
+from langsmith import AsyncClient, traceable
 from langsmith.run_helpers import get_current_run_tree
+from openevals.string.levenshtein import levenshtein_distance
 from pydantic import BaseModel
 
 from app.generate.graph import graph
@@ -75,3 +76,45 @@ async def generate(req: GenerateRequest) -> GenerateResponse:
         generated_draft=generated_draft,
         run_id=run_id,
     )
+
+
+class FeedbackRequest(BaseModel):
+    run_id: str
+    # None = AIの返信案が存在しない (スパム再分類後の手動返信など)
+    ai_body: str | None = None
+    final_body: str
+    original_topic: str
+    current_topic: str
+
+
+class FeedbackResponse(BaseModel):
+    operator_edited_topic: bool
+    edit_distance: float | None
+
+
+@app.post("/api/feedback")
+async def post_feedback(req: FeedbackRequest) -> FeedbackResponse:
+    # operator_edited_topic: 編集なし (AI正解)=1.0、編集あり=0.0
+    edited = req.original_topic != req.current_topic
+    topic_score = 0.0 if edited else 1.0
+
+    # edit_distance を算出 (1.0=完全一致、0.0=完全不一致)。返信案がなければ未定義
+    edit_score: float | None = None
+    if req.ai_body is not None:
+        result = levenshtein_distance(outputs=req.final_body, reference_outputs=req.ai_body)
+        edit_score = result["score"]
+
+    async with AsyncClient() as client:
+        await client.create_feedback(
+            run_id=req.run_id,
+            key="operator_edited_topic",
+            score=topic_score,
+        )
+        if edit_score is not None:
+            await client.create_feedback(
+                run_id=req.run_id,
+                key="edit_distance",
+                score=edit_score,
+            )
+
+    return FeedbackResponse(operator_edited_topic=edited, edit_distance=edit_score)
